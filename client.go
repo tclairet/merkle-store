@@ -1,6 +1,8 @@
 package merklestore
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"os"
@@ -8,6 +10,8 @@ import (
 
 	"github.com/tclairet/merklestore/merkletree"
 )
+
+const rootFileName = "root"
 
 type Uploader struct {
 	server  Server
@@ -38,10 +42,26 @@ func (u Uploader) Upload(paths []string) error {
 		return err
 	}
 	root := tree.Root()
-	if err := u.fileHandler.save("root", []byte(hex.EncodeToString(root))); err != nil {
+	if err := u.fileHandler.save(rootFileName, []byte(hex.EncodeToString(root))); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (u Uploader) Download(name string) error {
+	root, err := u.getRoot()
+	if err != nil {
+		return err
+	}
+	file, proof, err := u.server.Request(name)
+	if err != nil {
+		return err
+	}
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return err
+	}
+	return proof.Verify(hasher.Sum(nil), root)
 }
 
 func (u Uploader) upload(path string) error {
@@ -49,11 +69,14 @@ func (u Uploader) upload(path string) error {
 	if err != nil {
 		return err
 	}
+	var r2 bytes.Buffer
+	r1 := io.TeeReader(file, &r2)
+
 	defer file.Close()
-	if err := u.server.Upload(filepath.Base(path), file); err != nil {
+	if err := u.server.Upload(filepath.Base(path), r1); err != nil {
 		return err
 	}
-	if err := u.builder.Add(file); err != nil {
+	if err := u.builder.Add(&r2); err != nil {
 		return err
 	}
 	return nil
@@ -64,6 +87,18 @@ func (u Uploader) delete(path string) error {
 		return err
 	}
 	return nil
+}
+
+func (u Uploader) getRoot() ([]byte, error) {
+	buf, err := u.fileHandler.open(rootFileName)
+	if err != nil {
+		return nil, err
+	}
+	b, err := io.ReadAll(buf)
+	if err != nil {
+		return nil, err
+	}
+	return hex.DecodeString(string(b))
 }
 
 type fileHandler interface {

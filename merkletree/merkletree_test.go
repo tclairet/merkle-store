@@ -123,6 +123,53 @@ func TestMerkleTree(t *testing.T) {
 		}
 	})
 
+	t.Run("Proof", func(t *testing.T) {
+		tree := MerkleTree{newHash: newFakeHash}
+
+		cases := []struct {
+			inputs        []string
+			hash          string
+			expectedProof []string
+		}{
+			{inputs: []string{"a"}, hash: "a", expectedProof: []string{"a"}},
+			{inputs: []string{"a", "b"}, hash: "a", expectedProof: []string{"a", "b", "ab"}},
+			{inputs: []string{"a", "b", "c"}, hash: "a", expectedProof: []string{"a", "b", "ab", "c", "abc"}},
+			{inputs: []string{"a", "b", "c"}, hash: "c", expectedProof: []string{"c", "ab", "abc"}},
+			{inputs: []string{"a", "b", "c", "d"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd"}},
+			{inputs: []string{"a", "b", "c", "d"}, hash: "b", expectedProof: []string{"b", "a", "ab", "cd", "abcd"}},
+			{inputs: []string{"a", "b", "c", "d"}, hash: "c", expectedProof: []string{"c", "d", "cd", "ab", "abcd"}},
+			{inputs: []string{"a", "b", "c", "d"}, hash: "d", expectedProof: []string{"d", "c", "cd", "ab", "abcd"}},
+			{inputs: []string{"a", "b", "c", "d", "e"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd", "e", "abcde"}},
+			{inputs: []string{"a", "b", "c", "d", "e"}, hash: "e", expectedProof: []string{"e", "abcd", "abcde"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd", "ef", "abcdef"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f", "g"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd", "efg", "abcdefg"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd", "efgh", "abcdefgh"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, hash: "d", expectedProof: []string{"d", "c", "cd", "ab", "abcd", "efgh", "abcdefgh"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, hash: "h", expectedProof: []string{"h", "g", "gh", "ef", "efgh", "abcd", "abcdefgh"}},
+		}
+
+		for _, c := range cases {
+			t.Run(fmt.Sprintf("%s for %s", strings.Join(c.inputs, ""), c.hash), func(t *testing.T) {
+				tree.from(stringsToBytes(c.inputs))
+
+				proof, err := tree.ProofFor([]byte(c.hash))
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				for i := 0; i < len(c.expectedProof); i++ {
+					if got, want := string(proof.hashes[i]), c.expectedProof[i]; got != want {
+						t.Errorf("got %v, want %v", got, want)
+					}
+				}
+
+				if err := proof.Verify([]byte(c.hash), tree.root); err != nil {
+					t.Errorf(err.Error())
+				}
+			})
+		}
+	})
+
 	t.Run("From", func(t *testing.T) {
 		tree, err := From(stringsToBytes([]string{"a", "b"}))
 		if err != nil {
