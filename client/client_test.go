@@ -1,8 +1,9 @@
-package merklestore
+package client
 
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
@@ -14,19 +15,20 @@ type fakeFileHandler struct {
 	saved map[string][]byte
 }
 
-func (f *fakeFileHandler) open(name string) (io.ReadCloser, error) {
+func (f *fakeFileHandler) Open(name string) (io.ReadCloser, error) {
 	if _, exist := f.saved[name]; exist {
 		return io.NopCloser(bytes.NewReader(f.saved[name])), nil
 	}
 	return io.NopCloser(bytes.NewReader([]byte(name))), nil
 }
 
-func (f *fakeFileHandler) delete(path string) error {
+func (f *fakeFileHandler) Delete(path string) error {
 	return nil
 }
 
-func (f *fakeFileHandler) save(name string, content []byte) error {
-	f.saved[name] = content
+func (f *fakeFileHandler) Save(name string, content io.Reader) error {
+	b, _ := io.ReadAll(content)
+	f.saved[name] = b
 	return nil
 }
 
@@ -35,20 +37,20 @@ type fakeServer struct {
 	store map[string][]byte
 }
 
-func (f fakeServer) Upload(name string, file io.Reader) error {
+func (f fakeServer) Upload(root string, index int, total int, file io.Reader) error {
 	b, _ := io.ReadAll(file)
-	f.store[name] = b
+	f.store[fmt.Sprintf("%s%d", root, index)] = b
 	return nil
 }
 
-func (f fakeServer) Request(name string) (io.Reader, *merkletree.Proof, error) {
+func (f fakeServer) Request(root string, index int) (io.Reader, *merkletree.Proof, error) {
 	hasher := sha256.New()
-	_, _ = io.Copy(hasher, bytes.NewReader(f.store[name]))
+	_, _ = io.Copy(hasher, bytes.NewReader(f.store[fmt.Sprintf("%s%d", root, index)]))
 	proof, err := f.tree.ProofFor(hasher.Sum(nil))
 	if err != nil {
 		return nil, nil, err
 	}
-	return bytes.NewReader(f.store[name]), proof, nil
+	return bytes.NewReader(f.store[fmt.Sprintf("%s%d", root, index)]), proof, nil
 }
 
 func TestUploader(t *testing.T) {
@@ -84,7 +86,10 @@ func TestUploader(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if err := uploader.Download("a"); err != nil {
+	if err := uploader.Download(0); err != nil {
+		t.Error(err)
+	}
+	if err := uploader.Download(1); err != nil {
 		t.Error(err)
 	}
 }

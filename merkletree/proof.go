@@ -47,3 +47,7 @@ func (proof Proof) validate(left, right, expected []byte) error {
 	}
 	return nil
 }
+
+func (proof Proof) Hashes() [][]byte {
+	return proof.hashes
+}
