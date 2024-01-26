@@ -17,7 +17,7 @@ import (
 	"github.com/tclairet/merklestore/server"
 )
 
-const rootFileName = "root"
+const rootFileName = "root.json"
 
 var _ Server = server.Client{}
 
@@ -27,8 +27,7 @@ type Server interface {
 }
 
 type Uploader struct {
-	server  Server
-	builder *merkletree.Builder
+	server Server
 
 	fileHandler files.Handler
 }
@@ -36,7 +35,6 @@ type Uploader struct {
 func NewUploader(handler files.Handler, server Server) *Uploader {
 	return &Uploader{
 		server:      server,
-		builder:     merkletree.NewBuilder(),
 		fileHandler: handler,
 	}
 }
@@ -58,16 +56,17 @@ func (u Uploader) Upload(paths []string) (string, error) {
 }
 
 func (u Uploader) root(paths []string) (string, error) {
+	builder := merkletree.NewBuilder()
 	for _, path := range paths {
 		file, err := u.fileHandler.Open(path)
 		if err != nil {
 			return "", err
 		}
-		if err := u.builder.Add(file); err != nil {
+		if err := builder.Add(file); err != nil {
 			return "", err
 		}
 	}
-	tree, err := u.builder.Build()
+	tree, err := builder.Build()
 	if err != nil {
 		return "", err
 	}
@@ -89,7 +88,7 @@ func (u Uploader) Download(root string, indexes ...int) error {
 	}
 	for _, index := range indexes {
 		if err := u.downloadIndex(root, index); err != nil {
-			return err
+			return fmt.Errorf("index %d: %w", index, err)
 		}
 	}
 	return nil

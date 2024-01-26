@@ -1,11 +1,14 @@
 package tests
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -16,7 +19,7 @@ import (
 )
 
 func TestE2E(t *testing.T) {
-	defer cleanUp()
+	t.Cleanup(cleanUp)
 
 	fileHandler := files.OS{}
 	store, err := server.NewJsonStore(fileHandler)
@@ -28,19 +31,41 @@ func TestE2E(t *testing.T) {
 		panic(err)
 	}
 	api := server.NewAPI(s)
-
 	go makeServer(api.Routes())
 
 	serverClient := server.NewClient("http://0.0.0.0:3333")
 	uploader := client.NewUploader(fileHandler, serverClient)
-
-	root, err := uploader.Upload([]string{"0", "1", "2", "3"})
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		nbInputs int
+	}{
+		{1},
+		{5},
+		{50},
 	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%d", tt.nbInputs), func(t *testing.T) {
+			var inputs []string
+			for i := 0; i < tt.nbInputs; i++ {
+				if err := fileHandler.Save(strconv.Itoa(i), bytes.NewBuffer([]byte(strconv.Itoa(i)))); err != nil {
+					t.Fatal(err)
+				}
+				inputs = append(inputs, strconv.Itoa(i))
+			}
 
-	if err := uploader.Download(root, 0); err != nil {
-		t.Fatal(err)
+			root, err := uploader.Upload(inputs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				os.RemoveAll(root)
+			})
+
+			for i := 0; i < tt.nbInputs; i++ {
+				if err := uploader.Download(root, i); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
@@ -83,11 +108,6 @@ func makeServer(handler http.Handler) {
 }
 
 func cleanUp() {
-	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/0", "0")
-	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/1", "1")
-	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/2", "2")
-	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/3", "3")
-	os.RemoveAll("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345")
 	os.RemoveAll("backup.json")
-	os.RemoveAll("root")
+	os.RemoveAll("root.json")
 }

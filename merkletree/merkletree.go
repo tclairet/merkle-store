@@ -95,9 +95,9 @@ func (tree *MerkleTree) build(hashes [][]byte) error {
 	tree.height = 1
 	tree.nodes = make(map[string]*Node)
 
-	for _, hash := range hashes {
-		tree.nodes[hex.EncodeToString(hash)] = &Node{
-			hash: hash,
+	for _, h := range hashes {
+		tree.nodes[hex.EncodeToString(h)] = &Node{
+			hash: h,
 		}
 	}
 
@@ -123,15 +123,15 @@ func (tree *MerkleTree) buildBranch(hashes [][]byte) [][]byte {
 	var newNodes [][]byte
 
 	for i := 0; i < (len(hashes) / 2); i++ {
-		hash := sum(tree.newHash, hashes[i*2], hashes[i*2+1])
-		tree.nodes[hex.EncodeToString(hash)] = &Node{
-			hash:       hash,
+		h := sum(tree.newHash, hashes[i*2], hashes[i*2+1])
+		tree.nodes[hex.EncodeToString(h)] = &Node{
+			hash:       h,
 			leftChild:  hashes[i*2],
 			rightChild: hashes[i*2+1],
 		}
-		tree.nodes[hex.EncodeToString(hashes[i*2])].parent = hash
-		tree.nodes[hex.EncodeToString(hashes[i*2+1])].parent = hash
-		newNodes = append(newNodes, hash)
+		tree.nodes[hex.EncodeToString(hashes[i*2])].parent = h
+		tree.nodes[hex.EncodeToString(hashes[i*2+1])].parent = h
+		newNodes = append(newNodes, h)
 	}
 
 	if isOdd(len(hashes)) {

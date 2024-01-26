@@ -2,12 +2,17 @@ package server
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
+	"os"
 
 	"github.com/tclairet/merklestore/files"
 	"github.com/tclairet/merklestore/merkletree"
 )
+
+var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 type Server struct {
 	files    files.Handler
@@ -60,6 +65,12 @@ func (s *Server) Upload(root string, index, total int, file io.Reader) error {
 		return err
 	}
 
+	logger.Info("uploaded",
+		"root", root,
+		"index", index,
+		"hash", hex.EncodeToString(hasher.Sum(nil)),
+	)
+
 	if !done {
 		return nil
 	}
@@ -89,5 +100,15 @@ func (s *Server) Request(root string, index int) (io.Reader, *merkletree.Proof, 
 	if err != nil {
 		return nil, nil, err
 	}
+	logger.Info("request",
+		"root", root,
+		"index", index,
+		"proof", func() (hashes []string) {
+			for _, h := range proof.Hashes() {
+				hashes = append(hashes, hex.EncodeToString(h))
+			}
+			return
+		}(),
+	)
 	return file, proof, nil
 }
