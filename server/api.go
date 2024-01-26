@@ -27,6 +27,7 @@ func NewAPI(server *Server) API {
 
 func (api API) Routes() http.Handler {
 	r := chi.NewRouter()
+	// r.Use(httplog.RequestLogger(httplog.NewLogger("merkleStoreServer", httplog.Options{JSON: true})))
 	r.Post(uploadRoute, api.upload)
 	r.Post(requestRoute, api.request)
 	return r
@@ -72,13 +73,11 @@ func (api API) request(w http.ResponseWriter, r *http.Request) {
 	}
 	reader, proof, err := api.server.Request(request.Root, request.Index)
 	if err != nil {
-		fmt.Println(err.Error())
 		RespondWithError(w, http.StatusInternalServerError, err)
 		return
 	}
 	content, err := io.ReadAll(reader)
 	if err != nil {
-		fmt.Println(err.Error())
 		RespondWithError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -97,7 +96,11 @@ func RespondWithError(w http.ResponseWriter, code int, msg interface{}) {
 	case string:
 		message = m
 	}
-	RespondWithJSON(w, code, map[string]string{"error": message})
+	RespondWithJSON(w, code, JSONError{Error: message})
+}
+
+type JSONError struct {
+	Error string `json:"error,omitempty"`
 }
 
 func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {

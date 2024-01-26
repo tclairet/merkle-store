@@ -26,13 +26,12 @@ func (c Client) Upload(root string, index, total int, file io.Reader) error {
 	if err != nil {
 		return err
 	}
-	uploadRequest := UploadRequest{
+	b, err := json.Marshal(UploadRequest{
 		Root:    root,
 		Index:   index,
 		Total:   total,
 		Content: content,
-	}
-	b, err := json.Marshal(uploadRequest)
+	})
 	if err != nil {
 		return err
 	}
@@ -45,18 +44,20 @@ func (c Client) Upload(root string, index, total int, file io.Reader) error {
 		return err
 	}
 	if response.StatusCode != http.StatusOK {
-		// TODO parse error message
-		return fmt.Errorf("invalid server response %d", response.StatusCode)
+		var message JSONError
+		if err := json.NewDecoder(response.Body).Decode(&message); err != nil {
+			return err
+		}
+		return fmt.Errorf("invalid server response %d error '%s'", response.StatusCode, message.Error)
 	}
 	return nil
 }
 
 func (c Client) Request(root string, index int) (io.Reader, *merkletree.Proof, error) {
-	requestRequest := RequestRequest{
+	b, err := json.Marshal(RequestRequest{
 		Root:  root,
 		Index: index,
-	}
-	b, err := json.Marshal(requestRequest)
+	})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -69,8 +70,11 @@ func (c Client) Request(root string, index int) (io.Reader, *merkletree.Proof, e
 		return nil, nil, err
 	}
 	if response.StatusCode != http.StatusOK {
-		// TODO parse error message
-		return nil, nil, fmt.Errorf("invalid server response %d", response.StatusCode)
+		var message JSONError
+		if err := json.NewDecoder(response.Body).Decode(&message); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, fmt.Errorf("invalid server response %d error '%s'", response.StatusCode, message.Error)
 	}
 	var requestResponse RequestResponse
 	if err := json.NewDecoder(response.Body).Decode(&requestResponse); err != nil {
