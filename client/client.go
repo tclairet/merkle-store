@@ -4,8 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"slices"
+	"syscall"
 
 	"github.com/tclairet/merklestore/files"
 	"github.com/tclairet/merklestore/merkletree"
@@ -36,20 +41,20 @@ func NewUploader(handler files.Handler, server Server) *Uploader {
 	}
 }
 
-func (u Uploader) Upload(paths []string) error {
+func (u Uploader) Upload(paths []string) (string, error) {
 	root, err := u.root(paths)
 	if err != nil {
-		return err
+		return "", err
 	}
 	for i, path := range paths {
 		if err := u.upload(root, path, i, len(paths)); err != nil {
-			return err
+			return "", err
 		}
 		if err := u.delete(path); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return nil
+	return root, nil
 }
 
 func (u Uploader) root(paths []string) (string, error) {
@@ -66,28 +71,41 @@ func (u Uploader) root(paths []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	root := tree.Root()
-	if err := u.fileHandler.Save(rootFileName, bytes.NewBuffer([]byte(hex.EncodeToString(root)))); err != nil {
+
+	root := hex.EncodeToString(tree.Root())
+	if err := u.saveRoot(root); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(root), nil
+	return root, nil
 }
 
-func (u Uploader) Download(index int) error {
-	root, err := u.getRoot()
+func (u Uploader) Download(root string, indexes ...int) error {
+	roots, err := u.getRoots()
 	if err != nil {
 		return err
 	}
-	file, proof, err := u.server.Request(hex.EncodeToString(root), index)
+	if !slices.Contains(roots, root) {
+		return fmt.Errorf("unknown root hash")
+	}
+	for _, index := range indexes {
+		if err := u.downloadIndex(root, index); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (u Uploader) downloadIndex(root string, index int) error {
+	file, proof, err := u.server.Request(root, index)
 	if err != nil {
 		return err
 	}
 
-	if err := u.fileHandler.Save(fmt.Sprintf("%d", index), file); err != nil {
+	if err := u.fileHandler.Save(fmt.Sprintf("%s/%d", root, index), file); err != nil {
 		return err
 	}
 
-	reader, err := u.fileHandler.Open(fmt.Sprintf("%d", index))
+	reader, err := u.fileHandler.Open(fmt.Sprintf("%s/%d", root, index))
 	if err != nil {
 		return err
 	}
@@ -96,8 +114,11 @@ func (u Uploader) Download(index int) error {
 	if _, err := io.Copy(hasher, reader); err != nil {
 		return err
 	}
-
-	return proof.Verify(hasher.Sum(nil), root)
+	b, err := hex.DecodeString(root)
+	if err != nil {
+		return err
+	}
+	return proof.Verify(hasher.Sum(nil), b)
 }
 
 func (u Uploader) upload(root, path string, i, total int) error {
@@ -120,14 +141,39 @@ func (u Uploader) delete(path string) error {
 	return nil
 }
 
-func (u Uploader) getRoot() ([]byte, error) {
-	buf, err := u.fileHandler.Open(rootFileName)
+type RootsBackup struct {
+	Roots []string `json:"roots"`
+}
+
+func (u Uploader) saveRoot(root string) error {
+	roots, err := u.getRoots()
 	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(RootsBackup{Roots: append(roots, root)})
+	if err != nil {
+		return err
+	}
+	if err := u.fileHandler.Save(rootFileName, bytes.NewBuffer(b)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u Uploader) getRoots() ([]string, error) {
+	f, err := u.fileHandler.Open(rootFileName)
+	if err != nil {
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			if errors.Is(pathErr.Err, syscall.ENOENT) {
+				return []string{}, nil
+			}
+		}
 		return nil, err
 	}
-	b, err := io.ReadAll(buf)
-	if err != nil {
+	var rootsBackup RootsBackup
+	if err := json.NewDecoder(f).Decode(&rootsBackup); err != nil {
 		return nil, err
 	}
-	return hex.DecodeString(string(b))
+	return rootsBackup.Roots, nil
 }

@@ -64,7 +64,8 @@ func TestUploader(t *testing.T) {
 			saved: make(map[string][]byte),
 		},
 	}
-	if err := uploader.Upload([]string{"a", "b"}); err != nil {
+	root, err := uploader.Upload([]string{"a", "b"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	server.tree, _ = uploader.builder.Build()
@@ -77,19 +78,18 @@ func TestUploader(t *testing.T) {
 	leaf2.Write([]byte("b"))
 	h2 := leaf2.Sum(nil)
 
-	root := sha256.New()
-	root.Write(h1)
-	root.Write(h2)
+	expectedRoot := sha256.New()
+	expectedRoot.Write(h1)
+	expectedRoot.Write(h2)
 
-	gotRoot, _ := uploader.getRoot()
-	if got, want := gotRoot, root.Sum(nil); !reflect.DeepEqual(got, want) {
+	if got, want := root, expectedRoot.Sum(nil); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 
-	if err := uploader.Download(0); err != nil {
+	if err := uploader.Download(root, 0); err != nil {
 		t.Error(err)
 	}
-	if err := uploader.Download(1); err != nil {
+	if err := uploader.Download(root, 1); err != nil {
 		t.Error(err)
 	}
 }

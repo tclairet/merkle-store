@@ -16,6 +16,8 @@ import (
 )
 
 func TestE2E(t *testing.T) {
+	defer cleanUp()
+
 	fileHandler := files.OS{}
 	store, err := server.NewJsonStore(fileHandler)
 	if err != nil {
@@ -32,21 +34,14 @@ func TestE2E(t *testing.T) {
 	serverClient := server.NewClient("http://0.0.0.0:3333")
 	uploader := client.NewUploader(fileHandler, serverClient)
 
-	if err := uploader.Upload([]string{"0", "1", "2", "3"}); err != nil {
+	root, err := uploader.Upload([]string{"0", "1", "2", "3"})
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := uploader.Download(0); err != nil {
+	if err := uploader.Download(root, 0); err != nil {
 		t.Fatal(err)
 	}
-
-	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/0", "0")
-	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/1", "1")
-	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/2", "2")
-	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/3", "3")
-	os.RemoveAll("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345")
-	os.RemoveAll("backup.json")
-	os.RemoveAll("root")
 }
 
 func makeServer(handler http.Handler) {
@@ -85,4 +80,14 @@ func makeServer(handler http.Handler) {
 
 	// Wait for server context to be stopped
 	<-serverCtx.Done()
+}
+
+func cleanUp() {
+	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/0", "0")
+	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/1", "1")
+	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/2", "2")
+	os.Rename("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345/3", "3")
+	os.RemoveAll("c478fead0c89b79540638f844c8819d9a4281763af9272c7f3968776b6052345")
+	os.RemoveAll("backup.json")
+	os.RemoveAll("root")
 }
