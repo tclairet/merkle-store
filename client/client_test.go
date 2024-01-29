@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"reflect"
@@ -19,6 +20,9 @@ func (f *fakeFileHandler) Open(name string) (io.ReadCloser, error) {
 	if _, exist := f.saved[name]; exist {
 		return io.NopCloser(bytes.NewReader(f.saved[name])), nil
 	}
+	if rootFileName == name {
+		return io.NopCloser(bytes.NewReader([]byte("{}"))), nil
+	}
 	return io.NopCloser(bytes.NewReader([]byte(name))), nil
 }
 
@@ -33,20 +37,30 @@ func (f *fakeFileHandler) Save(name string, content io.Reader) error {
 }
 
 type fakeServer struct {
-	tree  *merkletree.MerkleTree
-	store map[string][]byte
+	store   map[string][]byte
+	tree    map[string]*merkletree.MerkleTree
+	builder map[string]*merkletree.IndexedBuilder
 }
 
-func (f fakeServer) Upload(root string, index int, total int, file io.Reader) error {
+func (f *fakeServer) Upload(root string, index int, total int, file io.Reader) error {
 	b, _ := io.ReadAll(file)
 	f.store[fmt.Sprintf("%s%d", root, index)] = b
-	return nil
+	if _, exist := f.builder[root]; !exist {
+		f.builder[root] = merkletree.NewIndexedBuilder(total)
+	}
+	h := sha256.New()
+	h.Write(b)
+	done, err := f.builder[root].AddHash(index, h.Sum(nil))
+	if done {
+		f.tree[root], _ = f.builder[root].Build()
+	}
+	return err
 }
 
-func (f fakeServer) Request(root string, index int) (io.Reader, *merkletree.Proof, error) {
+func (f *fakeServer) Request(root string, index int) (io.Reader, *merkletree.Proof, error) {
 	hasher := sha256.New()
 	_, _ = io.Copy(hasher, bytes.NewReader(f.store[fmt.Sprintf("%s%d", root, index)]))
-	proof, err := f.tree.ProofFor(hasher.Sum(nil))
+	proof, err := f.tree[root].ProofFor(hasher.Sum(nil))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -55,11 +69,12 @@ func (f fakeServer) Request(root string, index int) (io.Reader, *merkletree.Proo
 
 func TestUploader(t *testing.T) {
 	server := &fakeServer{
-		store: make(map[string][]byte),
+		store:   make(map[string][]byte),
+		tree:    make(map[string]*merkletree.MerkleTree),
+		builder: make(map[string]*merkletree.IndexedBuilder),
 	}
 	uploader := Uploader{
-		server:  server,
-		builder: merkletree.NewBuilder(),
+		server: server,
 		fileHandler: &fakeFileHandler{
 			saved: make(map[string][]byte),
 		},
@@ -68,7 +83,6 @@ func TestUploader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server.tree, _ = uploader.builder.Build()
 
 	leaf1 := sha256.New()
 	leaf1.Write([]byte("a"))
@@ -82,7 +96,7 @@ func TestUploader(t *testing.T) {
 	expectedRoot.Write(h1)
 	expectedRoot.Write(h2)
 
-	if got, want := root, expectedRoot.Sum(nil); !reflect.DeepEqual(got, want) {
+	if got, want := root, hex.EncodeToString(expectedRoot.Sum(nil)); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

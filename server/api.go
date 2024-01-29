@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -48,7 +47,6 @@ func (api API) upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := api.server.Upload(upload.Root, upload.Index, upload.Total, bytes.NewReader(upload.Content)); err != nil {
-		fmt.Println(err.Error())
 		RespondWithError(w, http.StatusInternalServerError, err)
 		return
 	}
