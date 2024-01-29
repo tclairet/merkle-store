@@ -10,11 +10,14 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "msc",
 	Short: "msc (MerkleStoreClient) is an uploader and downloader backed by a Merkletree",
+	CompletionOptions: cobra.CompletionOptions{
+		DisableDefaultCmd: true,
+	},
 }
 
 var (
 	uploadCmd = &cobra.Command{
-		Use:   "upload",
+		Use:   "upload [FILES]",
 		Short: "Upload set of files",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := MerkleStoreClient()
@@ -33,7 +36,7 @@ var (
 	}
 
 	downloadCmd = &cobra.Command{
-		Use:   "download",
+		Use:   "download ROOT_HASH [FILES_INDEX]",
 		Short: "Download the i file",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client, err := MerkleStoreClient()
