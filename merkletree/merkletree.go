@@ -26,9 +26,9 @@ func From(inputs [][]byte) (*MerkleTree, error) {
 	return tree, nil
 }
 
-func FromHashes(hashes [][]byte) (*MerkleTree, error) {
+func FromHashes(hashes [][]byte, newHash func() hash.Hash) (*MerkleTree, error) {
 	tree := &MerkleTree{
-		newHash: sha256.New,
+		newHash: newHash,
 	}
 	if err := tree.build(hashes); err != nil {
 		return nil, err

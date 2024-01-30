@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/tclairet/merklestore/merkletree"
@@ -48,9 +49,9 @@ func (f *fakeServer) Upload(root string, index int, total int, file io.Reader) e
 	if _, exist := f.builder[root]; !exist {
 		f.builder[root] = merkletree.NewIndexedBuilder(total)
 	}
-	h := sha256.New()
-	h.Write(b)
-	done, err := f.builder[root].AddHash(index, h.Sum(nil))
+	hasher := sha256.New()
+	hasher.Write(b)
+	done, err := f.builder[root].AddHash(index, hasher.Sum(nil))
 	if done {
 		f.tree[root], _ = f.builder[root].Build()
 	}
@@ -58,8 +59,13 @@ func (f *fakeServer) Upload(root string, index int, total int, file io.Reader) e
 }
 
 func (f *fakeServer) Request(root string, index int) (io.Reader, *merkletree.Proof, error) {
+	stored := f.store[fmt.Sprintf("%s%d", root, index)]
 	hasher := sha256.New()
-	_, _ = io.Copy(hasher, bytes.NewReader(f.store[fmt.Sprintf("%s%d", root, index)]))
+	hasher.Write(stored)
+	h1 := hasher.Sum(nil)
+	hasher.Reset()
+	hasher.Write([]byte(strconv.Itoa(index)))
+	hasher.Write(h1)
 	proof, err := f.tree[root].ProofFor(hasher.Sum(nil))
 	if err != nil {
 		return nil, nil, err
@@ -84,19 +90,28 @@ func TestUploader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	leaf1 := sha256.New()
-	leaf1.Write([]byte("a"))
-	h1 := leaf1.Sum(nil)
+	hasher := sha256.New()
+	hasher.Write([]byte("a"))
+	h1 := hasher.Sum(nil)
+	hasher.Reset()
+	hasher.Write([]byte("0"))
+	hasher.Write(h1)
+	h1 = hasher.Sum(nil)
 
-	leaf2 := sha256.New()
-	leaf2.Write([]byte("b"))
-	h2 := leaf2.Sum(nil)
+	hasher.Reset()
+	hasher.Write([]byte("b"))
+	h2 := hasher.Sum(nil)
+	hasher.Reset()
+	hasher.Write([]byte("1"))
+	hasher.Write(h2)
+	h2 = hasher.Sum(nil)
 
-	expectedRoot := sha256.New()
-	expectedRoot.Write(h1)
-	expectedRoot.Write(h2)
+	hasher.Reset()
+	hasher.Write(h1)
+	hasher.Write(h2)
+	expectedRoot := hasher.Sum(nil)
 
-	if got, want := root, hex.EncodeToString(expectedRoot.Sum(nil)); !reflect.DeepEqual(got, want) {
+	if got, want := root, hex.EncodeToString(expectedRoot); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 

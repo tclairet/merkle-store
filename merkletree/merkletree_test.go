@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -124,35 +125,43 @@ func TestMerkleTree(t *testing.T) {
 	})
 
 	t.Run("Proof", func(t *testing.T) {
-		tree := MerkleTree{newHash: newFakeHash}
 
 		cases := []struct {
 			inputs        []string
-			hash          string
+			index         int
 			expectedProof []string
 		}{
-			{inputs: []string{"a"}, hash: "a", expectedProof: []string{"a"}},
-			{inputs: []string{"a", "b"}, hash: "a", expectedProof: []string{"a", "b", "ab"}},
-			{inputs: []string{"a", "b", "c"}, hash: "a", expectedProof: []string{"a", "b", "ab", "c", "abc"}},
-			{inputs: []string{"a", "b", "c"}, hash: "c", expectedProof: []string{"c", "ab", "abc"}},
-			{inputs: []string{"a", "b", "c", "d"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd"}},
-			{inputs: []string{"a", "b", "c", "d"}, hash: "b", expectedProof: []string{"b", "a", "ab", "cd", "abcd"}},
-			{inputs: []string{"a", "b", "c", "d"}, hash: "c", expectedProof: []string{"c", "d", "cd", "ab", "abcd"}},
-			{inputs: []string{"a", "b", "c", "d"}, hash: "d", expectedProof: []string{"d", "c", "cd", "ab", "abcd"}},
-			{inputs: []string{"a", "b", "c", "d", "e"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd", "e", "abcde"}},
-			{inputs: []string{"a", "b", "c", "d", "e"}, hash: "e", expectedProof: []string{"e", "abcd", "abcde"}},
-			{inputs: []string{"a", "b", "c", "d", "e", "f"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd", "ef", "abcdef"}},
-			{inputs: []string{"a", "b", "c", "d", "e", "f", "g"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd", "efg", "abcdefg"}},
-			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, hash: "a", expectedProof: []string{"a", "b", "ab", "cd", "abcd", "efgh", "abcdefgh"}},
-			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, hash: "d", expectedProof: []string{"d", "c", "cd", "ab", "abcd", "efgh", "abcdefgh"}},
-			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, hash: "h", expectedProof: []string{"h", "g", "gh", "ef", "efgh", "abcd", "abcdefgh"}},
+			{inputs: []string{"a"}, index: 0, expectedProof: []string{"0a"}},
+			{inputs: []string{"a", "b"}, index: 0, expectedProof: []string{"0a", "1b", "0a1b"}},
+			{inputs: []string{"a", "b", "c"}, index: 0, expectedProof: []string{"0a", "1b", "0a1b", "2c", "0a1b2c"}},
+			{inputs: []string{"a", "b", "c"}, index: 2, expectedProof: []string{"2c", "0a1b", "0a1b2c"}},
+			{inputs: []string{"a", "b", "c", "d"}, index: 0, expectedProof: []string{"0a", "1b", "0a1b", "2c3d", "0a1b2c3d"}},
+			{inputs: []string{"a", "b", "c", "d"}, index: 1, expectedProof: []string{"1b", "0a", "0a1b", "2c3d", "0a1b2c3d"}},
+			{inputs: []string{"a", "b", "c", "d"}, index: 2, expectedProof: []string{"2c", "3d", "2c3d", "0a1b", "0a1b2c3d"}},
+			{inputs: []string{"a", "b", "c", "d"}, index: 3, expectedProof: []string{"3d", "2c", "2c3d", "0a1b", "0a1b2c3d"}},
+			{inputs: []string{"a", "b", "c", "d", "e"}, index: 0, expectedProof: []string{"0a", "1b", "0a1b", "2c3d", "0a1b2c3d", "4e", "0a1b2c3d4e"}},
+			{inputs: []string{"a", "b", "c", "d", "e"}, index: 4, expectedProof: []string{"4e", "0a1b2c3d", "0a1b2c3d4e"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f"}, index: 0, expectedProof: []string{"0a", "1b", "0a1b", "2c3d", "0a1b2c3d", "4e5f", "0a1b2c3d4e5f"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f", "g"}, index: 0, expectedProof: []string{"0a", "1b", "0a1b", "2c3d", "0a1b2c3d", "4e5f6g", "0a1b2c3d4e5f6g"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, index: 0, expectedProof: []string{"0a", "1b", "0a1b", "2c3d", "0a1b2c3d", "4e5f6g7h", "0a1b2c3d4e5f6g7h"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, index: 3, expectedProof: []string{"3d", "2c", "2c3d", "0a1b", "0a1b2c3d", "4e5f6g7h", "0a1b2c3d4e5f6g7h"}},
+			{inputs: []string{"a", "b", "c", "d", "e", "f", "g", "h"}, index: 7, expectedProof: []string{"7h", "6g", "6g7h", "4e5f", "4e5f6g7h", "0a1b2c3d", "0a1b2c3d4e5f6g7h"}},
 		}
 
 		for _, c := range cases {
-			t.Run(fmt.Sprintf("%s for %s", strings.Join(c.inputs, ""), c.hash), func(t *testing.T) {
-				tree.from(stringsToBytes(c.inputs))
+			t.Run(fmt.Sprintf("%s for %s", strings.Join(c.inputs, ""), c.inputs[c.index]), func(t *testing.T) {
+				builder := NewIndexedBuilder(len(c.inputs))
+				builder.newHash = newFakeHash
+				for i, input := range c.inputs {
+					builder.AddHash(i, []byte(input))
+				}
+				tree, err := builder.Build()
+				if err != nil {
+					t.Fatal(err)
+				}
 
-				proof, err := tree.ProofFor([]byte(c.hash))
+				indexedHash := []byte(strconv.Itoa(c.index) + c.inputs[c.index])
+				proof, err := tree.ProofFor(indexedHash)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -163,7 +172,7 @@ func TestMerkleTree(t *testing.T) {
 					}
 				}
 
-				if err := proof.Verify([]byte(c.hash), tree.root); err != nil {
+				if err := proof.Verify(indexedHash, tree.root); err != nil {
 					t.Errorf(err.Error())
 				}
 			})
@@ -190,7 +199,7 @@ func TestMerkleTree(t *testing.T) {
 		a := sha256.New().Sum([]byte("a"))
 		b := sha256.New().Sum([]byte("b"))
 
-		tree, err := FromHashes([][]byte{a, b})
+		tree, err := FromHashes([][]byte{a, b}, sha256.New)
 		if err != nil {
 			t.Fatal(err)
 		}

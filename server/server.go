@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 
 	"github.com/tclairet/merklestore/files"
 	"github.com/tclairet/merklestore/merkletree"
@@ -25,7 +26,7 @@ func New(files files.Handler, db store) (*Server, error) {
 	savedTrees := db.read()
 	trees := make(map[string]*merkletree.MerkleTree)
 	for root, hashes := range savedTrees {
-		tree, err := merkletree.FromHashes(hashes)
+		tree, err := merkletree.FromHashes(hashes, sha256.New)
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +97,11 @@ func (s *Server) Request(root string, index int) (io.Reader, *merkletree.Proof, 
 	if err != nil {
 		return nil, nil, err
 	}
-	proof, err := s.trees[root].ProofFor(hash)
+	hasher := sha256.New()
+	hasher.Write([]byte(strconv.Itoa(index)))
+	hasher.Write(hash)
+
+	proof, err := s.trees[root].ProofFor(hasher.Sum(nil))
 	if err != nil {
 		return nil, nil, err
 	}

@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"slices"
+	"strconv"
 	"syscall"
 
 	"github.com/tclairet/merklestore/files"
@@ -56,13 +57,13 @@ func (u Uploader) Upload(paths []string) (string, error) {
 }
 
 func (u Uploader) root(paths []string) (string, error) {
-	builder := merkletree.NewBuilder()
-	for _, path := range paths {
+	builder := merkletree.NewIndexedBuilder(len(paths))
+	for i, path := range paths {
 		file, err := u.fileHandler.Open(path)
 		if err != nil {
 			return "", err
 		}
-		if err := builder.Add(file); err != nil {
+		if _, err := builder.Add(i, file); err != nil {
 			return "", err
 		}
 	}
@@ -113,6 +114,10 @@ func (u Uploader) downloadIndex(root string, index int) error {
 	if _, err := io.Copy(hasher, reader); err != nil {
 		return err
 	}
+	h1 := hasher.Sum(nil)
+	hasher.Reset()
+	hasher.Write([]byte(strconv.Itoa(index)))
+	hasher.Write(h1)
 	b, err := hex.DecodeString(root)
 	if err != nil {
 		return err
